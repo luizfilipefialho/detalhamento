@@ -7,7 +7,6 @@ import json
 st.set_page_config(
     page_title="Processos Financeiros - Configuração",
     page_icon=":money_with_wings:",
-    layout="wide",
     initial_sidebar_state="auto",
     menu_items={
         "Get Help": "https://docs.streamlit.io/",
@@ -119,33 +118,92 @@ def save_cliente(nome_empresa, logo, nome_pessoa, cargo, email, celular):
 # --- Inicialização do Banco de Dados e Session State ---
 init_db()
 st.session_state.setdefault("cliente_id", None)
-# A tela inicial agora é a de entrada do código do cliente
 st.session_state.setdefault("tela", "login")
 st.session_state.setdefault("selected_cnpjs", [])
 st.session_state.setdefault("grupar", False)
 
 # --- Telas do App ---
+
 def tela_login():
-    """Tela inicial para entrada do código do cliente."""
-    st.title("Bem-vindo ao Sistema de Processos Financeiros")
-    codigo = st.text_input("Digite o código do cliente:")
-    if st.button("Entrar"):
-        try:
-            codigo_int = int(codigo)
-        except ValueError:
-            st.error("Por favor, digite um código numérico válido.")
-            return
-        cliente = load_cliente(codigo_int)
-        if cliente:
-            st.session_state.cliente_id = codigo_int
-            st.success("Cliente encontrado! Carregando informações...")
-            st.session_state.tela = "visao_cliente"
-            st.rerun()
-        else:
-            st.error("Código não encontrado. Verifique ou cadastre um novo cliente.")
-    if st.button("Cadastrar Novo Cliente"):
-        st.session_state.tela = "inicial"
-        st.rerun()
+
+    # Aplicando um pouco de estilo simples e seguro
+    st.markdown("""
+        <style>
+            .stApp {
+                background-color: #f0f2f6;
+            }
+            div.stButton > button:first-child {
+                width: 100%;
+            }
+            .login-title {
+                font-size: 28px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 0px;
+                color: #333;
+            }
+            .login-subtitle {
+                font-size: 14px;
+                text-align: center;
+                margin-bottom: 30px;
+                color: #666;
+            }
+            [data-testid="stForm"] {
+                background-color: white;
+                border-radius: 10px;
+                padding: 40px;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Espaçamento superior seguro
+    st.write("#")
+
+    # Container central Streamlit (100% seguro)
+    login_container = st.container()
+
+    with login_container:
+        # Utilize st.form para agrupar visualmente e funcionalmente seu formulário
+        with st.form("login_form"):
+            # Logo centralizado
+            col_logo1, col_logo2, col_logo3 = st.columns([1,2,1])
+            with col_logo2:
+                st.image("logo_dattos.png", width=250)
+
+            # Títulos
+            st.markdown('<div class="login-title">Gerador de Detalhamento de Escopo Dattos</div>', unsafe_allow_html=True)
+            st.markdown('<div class="login-subtitle">Bem-vindo ao sistema que gera o detalhamento de escopo para seus processos financeiros.<br>Insira seu código de cliente para prosseguir.</div>', unsafe_allow_html=True)
+
+            # Campo de entrada
+            codigo = st.text_input("Digite o código do cliente:", placeholder="Ex: 123")
+
+            # Botões lado a lado 100% Streamlit
+            col1, col2 = st.columns(2)
+            with col1:
+                entrar = st.form_submit_button("Entrar")
+            with col2:
+                cadastrar = st.form_submit_button("Cadastrar Novo Cliente")
+
+            # Processar botões após clique
+            if entrar:
+                try:
+                    codigo_int = int(codigo)
+                except ValueError:
+                    st.error("Por favor, digite um código numérico válido.")
+                    return
+                cliente = load_cliente(codigo_int)
+                if cliente:
+                    st.session_state.cliente_id = codigo_int
+                    st.success("Cliente encontrado! Carregando informações...")
+                    st.session_state.tela = "visao_cliente"
+                    st.rerun()
+                else:
+                    st.error("Código não encontrado. Verifique ou cadastre um novo cliente.")
+
+            if cadastrar:
+                st.session_state.tela = "inicial"
+                st.rerun()
 
 def tela_inicial():
     """Tela para cadastro de novo cliente."""
