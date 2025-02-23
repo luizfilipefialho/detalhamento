@@ -218,20 +218,22 @@ def tela_processos():
                 st.rerun()
 
 def tela_configurar_processo():
-    """Tela para configuração avançada do processo selecionado."""
     processo_id = st.session_state.get("processo_id")
     if not processo_id:
         st.error("Processo não selecionado.")
         st.session_state.tela = "processos"
         st.rerun()
-    
+
     with get_db_connection() as conn:
-        processo = conn.execute("SELECT id, nome, tipo, frequencia FROM processos WHERE id = ?", (processo_id,)).fetchone()
+        processo = conn.execute(
+            "SELECT id, nome, tipo, frequencia FROM processos WHERE id = ?", 
+            (processo_id,)
+        ).fetchone()
 
     st.title(f"Configuração do Processo: {processo[1]}")
     st.markdown("---")
-    
-    # Passo 1: Associação de CNPJs
+
+    # Passo 1: Associação de CNPJs ao Processo
     st.header("Passo 1: Associação de CNPJs ao Processo")
     cnpjs = load_cnpjs(st.session_state.cliente_id)
     cnpj_options = [cnpj[1] for cnpj in cnpjs] if cnpjs else []
@@ -247,82 +249,144 @@ def tela_configurar_processo():
             group_dict[cnpj] = grupo
 
     st.markdown("---")
-    # Passo 2: Seleção ou Adição de Layouts
-    st.header("Passo 2: Seleção ou Adição de Layouts")
-    layouts_config = {}
-    if usa_mesmo_layout or not cnpj_selecionados:
-        st.subheader("Layout Único para Todos os CNPJs")
-        escolha_layout = st.selectbox("Selecione um layout existente", options=[
-            "Excel - Extrato.xlsx", "CSV - Transacoes.csv", "PDF - Relatorio.pdf", "Adicionar Novo Layout"
-        ], key="layout_unico")
-        if escolha_layout == "Adicionar Novo Layout":
-            tipo_arquivo = st.selectbox("Tipo de Arquivo", [
-                "Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML", "SWIFT",
-                "Extrato Adquirente", "API", "Banco de Dados", "PDF"
-            ], key="tipo_layout")
-            nome_arquivo = st.text_input("Nome do Layout", key="nome_layout")
-            layouts_config["todos"] = {"tipo": tipo_arquivo, "nome": nome_arquivo}
-        else:
-            layouts_config["todos"] = {"layout": escolha_layout}
-    else:
-        st.subheader("Layouts por Grupo de CNPJs")
-        grupos = list(set(group_dict.values()))
-        for grupo in grupos:
-            st.markdown(f"**Grupo {grupo}** - CNPJs: {', '.join([cnpj for cnpj, g in group_dict.items() if g == grupo])}")
-            escolha_layout = st.selectbox(f"Selecione um layout para o Grupo {grupo}", options=[
-                "Excel - Extrato.xlsx", "CSV - Transacoes.csv", "PDF - Relatorio.pdf", "Adicionar Novo Layout"
-            ], key=f"layout_grupo_{grupo}")
-            if escolha_layout == "Adicionar Novo Layout":
-                tipo_arquivo = st.selectbox("Tipo de Arquivo", [
-                    "Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML", "SWIFT",
-                    "Extrato Adquirente", "API", "Banco de Dados", "PDF"
-                ], key=f"tipo_layout_{grupo}")
-                nome_arquivo = st.text_input("Nome do Layout", key=f"nome_layout_{grupo}")
-                layouts_config[grupo] = {"tipo": tipo_arquivo, "nome": nome_arquivo}
-            else:
-                layouts_config[grupo] = {"layout": escolha_layout}
-    
-    st.markdown("---")
-    # Passo 3: Encadeamento de Processos
-    st.header("Passo 3: Encadeamento de Processos")
-    usar_saida = st.checkbox("Usar a saída de outro processo como entrada para este processo?")
-    processo_encadeado = None
-    if usar_saida:
-        processos_existentes = load_processos(st.session_state.cliente_id)
-        processos_filtrados = [proc for proc in processos_existentes if proc[0] != processo_id]
-        if processos_filtrados:
-            processo_encadeado = st.selectbox(
-                "Selecione o processo de origem:",
-                options=[f"{proc[1]} - {proc[2]}" for proc in processos_filtrados],
-                key="proc_encadeado"
+
+    # Passo 2: Definição dos Layouts de Entrada
+    st.header("Passo 2: Definição dos Layouts de Entrada")
+    num_layouts = st.number_input(
+        "Número de Layouts de Entrada", 
+        min_value=1, 
+        step=1, 
+        value=1, 
+        key="num_layouts"
+    )
+    layouts_config = []
+
+    for i in range(1, num_layouts + 1):
+        st.markdown(f"**Layout de Entrada #{i}**")
+        layout_tipo = st.radio(
+            f"Selecione o tipo de entrada para o layout #{i}",
+            options=["Arquivo", "Encadeamento"],
+            key=f"layout_tipo_{i}"
+        )
+
+        if layout_tipo == "Arquivo":
+            escolha_layout = st.selectbox(
+                f"Selecione um layout para a entrada #{i}",
+                options=[
+                    "Excel - Extrato.xlsx", 
+                    "CSV - Transacoes.csv", 
+                    "PDF - Relatorio.pdf", 
+                    "Adicionar Novo Layout"
+                ],
+                key=f"layout_escolha_{i}"
             )
-        else:
-            st.info("Nenhum outro processo cadastrado para encadeamento.")
-    
+            if escolha_layout == "Adicionar Novo Layout":
+                tipo_arquivo = st.selectbox(
+                    f"Tipo de Arquivo para o layout #{i}",
+                    options=[
+                        "Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI",
+                        "XML", "SWIFT", "Extrato Adquirente", "API", "Banco de Dados", "PDF"
+                    ],
+                    key=f"tipo_layout_{i}"
+                )
+                nome_arquivo = st.text_input(
+                    f"Nome do Layout #{i}",
+                    key=f"nome_layout_{i}"
+                )
+                layouts_config.append({
+                    "tipo": "Arquivo",
+                    "modo": "novo",
+                    "arquivo_tipo": tipo_arquivo,
+                    "nome": nome_arquivo
+                })
+            else:
+                layouts_config.append({
+                    "tipo": "Arquivo",
+                    "modo": "existente",
+                    "arquivo": escolha_layout
+                })
+
+        else:  # Caso "Encadeamento"
+            processos_existentes = load_processos(st.session_state.cliente_id)
+            processos_filtrados = [proc for proc in processos_existentes if proc[0] != processo_id]
+
+            if processos_filtrados:
+                processo_encadeado = st.selectbox(
+                    f"Selecione o processo de origem para a entrada #{i}",
+                    options=[f"{proc[1]} - {proc[2]}" for proc in processos_filtrados],
+                    key=f"proc_encadeado_{i}"
+                )
+                layouts_config.append({
+                    "tipo": "Encadeamento",
+                    "processo": processo_encadeado
+                })
+            else:
+                st.info("Nenhum processo disponível para encadeamento.")
+                layouts_config.append({
+                    "tipo": "Encadeamento",
+                    "processo": None
+                })
+
     st.markdown("---")
-    # Passo 4: Especificação de Arquivos de Retorno (Opcional)
-    st.header("Passo 4: Especificação de Arquivos de Retorno (Opcional)")
+
+    # Passo 3: Especificação de Arquivos de Retorno (Opcional)
+    st.header("Passo 3: Especificação de Arquivos de Retorno (Opcional)")
     usar_retorno = st.checkbox("Este processo requer arquivos de retorno?")
     retorno_config = {}
+
     if usar_retorno:
-        tipo_retorno = st.selectbox("Tipo de Arquivo de Retorno", ["CSV", "XML", "TXT", "JSON"], key="retorno_tipo")
-        proposito_retorno = st.text_input("Propósito do Arquivo de Retorno", key="retorno_proposito")
-        retorno_config = {"tipo": tipo_retorno, "proposito": proposito_retorno}
-    
+        tipo_retorno = st.selectbox(
+            "Tipo de Arquivo de Retorno",
+            ["CSV", "XML", "TXT", "JSON"],
+            key="retorno_tipo"
+        )
+        proposito_retorno = st.text_input(
+            "Propósito do Arquivo de Retorno",
+            key="retorno_proposito"
+        )
+        retorno_config = {
+            "tipo": tipo_retorno,
+            "proposito": proposito_retorno
+        }
+
     st.markdown("---")
-    # Salvar Configuração Avançada do Processo
+
+    # Botão para Gerenciar Layouts (novo)
+    if st.button("Gerenciar Layouts", key="gerenciar_layouts"):
+        st.session_state.tela = "layouts"
+        st.rerun()
+
+    # Salvar Configuração Avançada do Processo com UPDATE se já existir registro
     if st.button("Salvar Configuração do Processo"):
         cnpjs_salvos = cnpj_selecionados if cnpj_selecionados else []
-        layouts_salvos = layouts_config
-        encadeamento_salvo = processo_encadeado if processo_encadeado else ""
-        retorno_salvo = retorno_config
         with get_db_connection() as conn:
-            conn.execute("""
-                INSERT INTO processo_config (processo_id, cnpjs, layouts, encadeamento, retorno)
-                VALUES (?, ?, ?, ?, ?)
-            """, (processo_id, json.dumps(cnpjs_salvos), json.dumps(layouts_salvos), encadeamento_salvo, json.dumps(retorno_salvo)))
+            proc_conf = conn.execute("SELECT id FROM processo_config WHERE processo_id = ?", (processo_id,)).fetchone()
+            if proc_conf:
+                conn.execute("""
+                    UPDATE processo_config 
+                    SET cnpjs = ?, layouts = ?, encadeamento = ?, retorno = ?
+                    WHERE processo_id = ?
+                """, (
+                    json.dumps(cnpjs_salvos),
+                    json.dumps(layouts_config),
+                    "",  # encadeamento incluído nos layouts_config 
+                    json.dumps(retorno_config),
+                    processo_id
+                ))
+            else:
+                conn.execute("""
+                    INSERT INTO processo_config (processo_id, cnpjs, layouts, encadeamento, retorno)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    processo_id,
+                    json.dumps(cnpjs_salvos),
+                    json.dumps(layouts_config),
+                    "",
+                    json.dumps(retorno_config)
+                ))
             conn.execute("UPDATE processos SET configurado = 1 WHERE id = ?", (processo_id,))
             conn.commit()
+
         st.success("Configuração do processo salva com sucesso!")
         st.session_state.tela = "processos"
         st.rerun()
@@ -331,12 +395,79 @@ def tela_configurar_processo():
         st.session_state.tela = "processos"
         st.rerun()
 
+def tela_layouts():
+    st.title("Gerenciamento de Layouts")
+    processo_id = st.session_state.get("processo_id")
+    with get_db_connection() as conn:
+        proc_conf = conn.execute("SELECT layouts FROM processo_config WHERE processo_id = ?", (processo_id,)).fetchone()
+    layouts_config = []
+    if proc_conf and proc_conf[0]:
+        layouts_config = json.loads(proc_conf[0])
+    st.subheader("Layouts Criados")
+    if layouts_config:
+        for idx, layout in enumerate(layouts_config):
+            st.write(f"Layout {idx+1}: {layout}")
+    else:
+        st.info("Nenhum layout criado.")
+    
+    if st.button("Adicionar Novo Layout"):
+        st.session_state.tela = "adicionar_layout"
+        st.rerun()
+    
+    if st.button("Voltar"):
+        st.session_state.tela = "configurar_processo"
+        st.rerun()
+
+def tela_adicionar_layout():
+    st.title("Adicionar Novo Layout")
+    tipo_layout = st.radio("Tipo de Layout", ["Arquivo", "Encadeamento"])
+    if tipo_layout == "Arquivo":
+        modo = st.radio("Modo", ["novo", "existente"])
+        if modo == "novo":
+            tipo_arquivo = st.selectbox("Tipo de Arquivo", ["Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML", "SWIFT", "Extrato Adquirente", "API", "Banco de Dados", "PDF"])
+            nome_layout = st.text_input("Nome do Layout")
+            novo_layout = {"tipo": "Arquivo", "modo": "novo", "arquivo_tipo": tipo_arquivo, "nome": nome_layout}
+        else:
+            arquivo = st.selectbox("Selecione um layout existente", ["Excel - Extrato.xlsx", "CSV - Transacoes.csv", "PDF - Relatorio.pdf"])
+            novo_layout = {"tipo": "Arquivo", "modo": "existente", "arquivo": arquivo}
+    else:
+        processos_existentes = load_processos(st.session_state.cliente_id)
+        processos_filtrados = [proc for proc in processos_existentes if proc[0] != st.session_state.processo_id]
+        if processos_filtrados:
+            processo_encadeado = st.selectbox("Selecione o processo de origem", [f"{proc[1]} - {proc[2]}" for proc in processos_filtrados])
+        else:
+            processo_encadeado = None
+        novo_layout = {"tipo": "Encadeamento", "processo": processo_encadeado}
+
+    if st.button("Salvar Novo Layout"):
+        processo_id = st.session_state.processo_id
+        with get_db_connection() as conn:
+            proc_conf = conn.execute("SELECT id, layouts FROM processo_config WHERE processo_id = ?", (processo_id,)).fetchone()
+            layouts_config = []
+            if proc_conf and proc_conf[1]:
+                layouts_config = json.loads(proc_conf[1])
+            layouts_config.append(novo_layout)
+            if proc_conf:
+                conn.execute("UPDATE processo_config SET layouts = ? WHERE id = ?", (json.dumps(layouts_config), proc_conf[0]))
+            else:
+                conn.execute("INSERT INTO processo_config (processo_id, layouts) VALUES (?, ?)", (processo_id, json.dumps(layouts_config)))
+            conn.commit()
+        st.success("Layout adicionado!")
+        st.session_state.tela = "layouts"
+        st.rerun()
+
+    if st.button("Voltar"):
+        st.session_state.tela = "layouts"
+        st.rerun()
+
 # --- Controle de Navegação das Telas ---
 telas = {
     "inicial": tela_inicial,
     "visao_cliente": tela_visao_cliente,
     "processos": tela_processos,
     "configurar_processo": tela_configurar_processo,
+    "layouts": tela_layouts,
+    "adicionar_layout": tela_adicionar_layout
 }
 
 # Chama a tela vigente conforme st.session_state.tela
