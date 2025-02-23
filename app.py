@@ -116,16 +116,39 @@ def save_cliente(nome_empresa, logo, nome_pessoa, cargo, email, celular):
     st.session_state.tela = "visao_cliente"
     st.rerun()
 
-# --- Inicialização ---
+# --- Inicialização do Banco de Dados e Session State ---
 init_db()
 st.session_state.setdefault("cliente_id", None)
-st.session_state.setdefault("tela", "inicial")
+# A tela inicial agora é a de entrada do código do cliente
+st.session_state.setdefault("tela", "login")
 st.session_state.setdefault("selected_cnpjs", [])
 st.session_state.setdefault("grupar", False)
 
 # --- Telas do App ---
+def tela_login():
+    """Tela inicial para entrada do código do cliente."""
+    st.title("Bem-vindo ao Sistema de Processos Financeiros")
+    codigo = st.text_input("Digite o código do cliente:")
+    if st.button("Entrar"):
+        try:
+            codigo_int = int(codigo)
+        except ValueError:
+            st.error("Por favor, digite um código numérico válido.")
+            return
+        cliente = load_cliente(codigo_int)
+        if cliente:
+            st.session_state.cliente_id = codigo_int
+            st.success("Cliente encontrado! Carregando informações...")
+            st.session_state.tela = "visao_cliente"
+            st.rerun()
+        else:
+            st.error("Código não encontrado. Verifique ou cadastre um novo cliente.")
+    if st.button("Cadastrar Novo Cliente"):
+        st.session_state.tela = "inicial"
+        st.rerun()
 
 def tela_inicial():
+    """Tela para cadastro de novo cliente."""
     st.title("Cadastro de Cliente")
     st.markdown("<p style='color: #6c757d; font-size: 18px;'>Preencha os dados do cliente para iniciar o cadastro.</p>", unsafe_allow_html=True)
     cliente = load_cliente(st.session_state.cliente_id) if st.session_state.cliente_id else None
@@ -147,20 +170,22 @@ def tela_inicial():
     st.info("Após preencher os dados, clique em 'Salvar Cliente' para prosseguir.")
 
 def tela_visao_cliente():
+    """Tela para exibir os detalhes do cliente e gerenciar CNPJs."""
     cliente = load_cliente(st.session_state.cliente_id)
     if not cliente:
         st.error("Cliente não encontrado!")
-        st.session_state.tela = "inicial"
+        st.session_state.tela = "login"
         st.rerun()
         return
     st.title(f"📁 {cliente[1]} - Detalhes do Cliente")
+    st.write(f"**Código do Cliente:** {st.session_state.cliente_id}")
     col1, col2 = st.columns([3, 1])
     with col1:
         st.subheader("Informações Principais")
-        st.write(f"👤 <b>Nome:</b> {cliente[3]}", unsafe_allow_html=True)
-        st.write(f"🎓 <b>Cargo:</b> {cliente[4]}", unsafe_allow_html=True)
-        st.write(f"📧 <b>E-mail:</b> {cliente[5]}", unsafe_allow_html=True)
-        st.write(f"📱 <b>Celular:</b> {cliente[6]}", unsafe_allow_html=True)
+        st.write(f"👤 **Nome:** {cliente[3]}")
+        st.write(f"🎓 **Cargo:** {cliente[4]}")
+        st.write(f"📧 **E-mail:** {cliente[5]}")
+        st.write(f"📱 **Celular:** {cliente[6]}")
     with col2:
         if cliente[2]:
             st.image(cliente[2], width=150)
@@ -431,7 +456,8 @@ def tela_agrupamento():
         original_processo_id = st.session_state.get("processo_id")
         with get_db_connection() as conn:
             processo = conn.execute(
-                "SELECT id, nome, tipo, frequencia, cliente_id FROM processos WHERE id = ?", (original_processo_id,)
+                "SELECT id, nome, tipo, frequencia, cliente_id FROM processos WHERE id = ?", 
+                (original_processo_id,)
             ).fetchone()
         if not processo:
             st.error("Processo original não encontrado.")
@@ -550,8 +576,9 @@ def tela_adicionar_layout():
         st.session_state.tela = "layouts"
         st.rerun()
 
-# --- Controle de Navegação ---
+# --- Controle de Navegação das Telas ---
 telas = {
+    "login": tela_login,
     "inicial": tela_inicial,
     "visao_cliente": tela_visao_cliente,
     "processos": tela_processos,
@@ -566,5 +593,5 @@ if tela in telas:
     telas[tela]()
 else:
     st.error("Tela não encontrada!")
-    st.session_state.tela = "inicial"
+    st.session_state.tela = "login"
     st.rerun()
