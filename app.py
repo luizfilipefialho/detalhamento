@@ -2,8 +2,12 @@ import streamlit as st
 import sqlite3
 from typing import List, Optional
 import json
+import unicodedata
+import streamlit.components.v1 as components
 
+# ------------------------------------------------------------------
 # Configuração da página (deve ser a primeira instrução)
+# ------------------------------------------------------------------
 st.set_page_config(
     page_title="Processos Financeiros - Configuração",
     page_icon=":money_with_wings:",
@@ -15,7 +19,9 @@ st.set_page_config(
     }
 )
 
-# --- Funções do Banco de Dados ---
+# ------------------------------------------------------------------
+# Funções do Banco de Dados
+# ------------------------------------------------------------------
 def get_db_connection():
     return sqlite3.connect("processos.db", check_same_thread=False)
 
@@ -65,7 +71,9 @@ def init_db():
         ''')
         conn.commit()
 
-# --- Funções de carregamento e inserção de dados ---
+# ------------------------------------------------------------------
+# Funções de carregamento e inserção de dados
+# ------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def load_cliente(cliente_id: int) -> Optional[tuple]:
     with get_db_connection() as conn:
@@ -115,18 +123,32 @@ def save_cliente(nome_empresa, logo, nome_pessoa, cargo, email, celular):
     st.session_state.tela = "visao_cliente"
     st.rerun()
 
-# --- Inicialização do Banco de Dados e Session State ---
+# ------------------------------------------------------------------
+# Inicialização do Banco de Dados e Session State
+# ------------------------------------------------------------------
 init_db()
 st.session_state.setdefault("cliente_id", None)
 st.session_state.setdefault("tela", "login")
 st.session_state.setdefault("selected_cnpjs", [])
 st.session_state.setdefault("grupar", False)
 
-# --- Telas do App ---
+# ------------------------------------------------------------------
+# Função para remover acentuação e caracteres especiais
+# ------------------------------------------------------------------
+def remove_accents(s: str) -> str:
+    """
+    Remove acentuação de uma string para evitar quebra no Mermaid.js
+    """
+    nfkd = unicodedata.normalize('NFKD', s)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
+# ------------------------------------------------------------------
+# Telas do App
+# ------------------------------------------------------------------
 def tela_login():
-
-    # Aplicando um pouco de estilo simples e seguro
+    """
+    Tela de login simples com estilo básico e seguro.
+    """
     st.markdown("""
         <style>
             .stApp {
@@ -157,35 +179,27 @@ def tela_login():
         </style>
     """, unsafe_allow_html=True)
 
-    # Espaçamento superior seguro
     st.write("#")
-
-    # Container central Streamlit (100% seguro)
     login_container = st.container()
 
     with login_container:
-        # Utilize st.form para agrupar visualmente e funcionalmente seu formulário
         with st.form("login_form"):
-            # Logo centralizado
             col_logo1, col_logo2, col_logo3 = st.columns([1,2,1])
             with col_logo2:
+                # Ajuste o caminho da imagem conforme a sua necessidade
                 st.image("logo_dattos.png", width=250)
 
-            # Títulos
             st.markdown('<div class="login-title">Gerador de Detalhamento de Escopo Dattos</div>', unsafe_allow_html=True)
             st.markdown('<div class="login-subtitle">Bem-vindo ao sistema que gera o detalhamento de escopo para seus processos financeiros.<br>Insira seu código de cliente para prosseguir.</div>', unsafe_allow_html=True)
 
-            # Campo de entrada
             codigo = st.text_input("Digite o código do cliente:", placeholder="Ex: 123")
 
-            # Botões lado a lado 100% Streamlit
             col1, col2 = st.columns(2)
             with col1:
                 entrar = st.form_submit_button("Entrar")
             with col2:
                 cadastrar = st.form_submit_button("Cadastrar Novo Cliente")
 
-            # Processar botões após clique
             if entrar:
                 try:
                     codigo_int = int(codigo)
@@ -262,22 +276,65 @@ def tela_visao_cliente():
     with col2:
         st.button("⏭️ Continuar para Processos", on_click=lambda: st.session_state.update(tela="processos"))
 
+
+    st.markdown("""
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <i class="fa-solid fa-file-csv"></i> Arquivo CSV  
+    <i class="fa-solid fa-file-pdf"></i> Arquivo PDF  
+    <i class="fa-solid fa-file-excel"></i> Arquivo Excel  
+    <i class="fa-solid fa-file-word"></i> Arquivo Word  
+    <i class="fa-solid fa-file-zipper"></i> Arquivo Zip  
+    """, unsafe_allow_html=True)
+
+
 def tela_processos():
+    """
+    Tela para listar e criar processos, além de permitir a geração de um diagrama
+    selecionando um processo via selectbox.
+    """
     st.title("⚙️ Configuração de Processos")
     st.write("Gerencie e adicione processos financeiros para este cliente.")
+
     processos = load_processos(st.session_state.cliente_id)
+    
     if processos:
         st.subheader("🔍 Processos Existentes")
+
+        # Botões para editar cada processo (opcional, pode remover se quiser apenas o selectbox)
         for proc in processos:
             if st.button(f"🔗 {proc[1]} - {proc[2]} ({proc[3]})", key=f"processo_{proc[0]}"):
                 st.session_state.processo_id = proc[0]
                 st.session_state.tela = "configurar_processo"
-                print(f"DEBUG: Abrindo processo {proc[0]}")
                 st.rerun()
+
+        # st.write("---")
+        # st.subheader("Gerar Diagrama do Processo")
+
+        # # Cria uma lista de opções no formato "ID - NomeDoProcesso"
+        # opcoes_diagrama = [f"{p[0]} - {p[1]}" for p in processos]
+        # selecao = st.selectbox("Selecione um processo para gerar o diagrama", opcoes_diagrama)
+
+        # if st.button("Gerar Diagrama do Processo"):
+        #     # Extrai o ID do processo da string "ID - Nome"
+        #     proc_id_str = selecao.split(" - ")[0]
+        #     proc_id = int(proc_id_str)
+        #     st.session_state.processo_id = proc_id
+        #     st.session_state.tela = "diagrama"
+        #     st.rerun()
+
+    else:
+        st.info("Nenhum processo cadastrado para este cliente.")
+
+    st.write("---")
     st.subheader("Criar Novo Processo")
+
     nome_processo = st.text_input("Nome do Processo")
     tipo_processo = st.selectbox("Tipo de Processo", ["Análise Tabular", "Conciliação", "Saldos", "Pagamentos"])
     frequencia = st.selectbox("Frequência", ["Diária", "Semanal", "Mensal"])
+
     agrupar = st.checkbox("Agrupar CNPJs para layouts diferentes?")
     if agrupar:
         cnpjs = load_cnpjs(st.session_state.cliente_id)
@@ -285,9 +342,9 @@ def tela_processos():
         selected_cnpjs = st.multiselect("Selecione os CNPJs para agrupamento", options=cnpj_options)
         st.session_state.selected_cnpjs = selected_cnpjs
         st.session_state.grupar = True
-        print(f"DEBUG: Agrupar selecionado com CNPJs: {selected_cnpjs}")
     else:
         st.session_state.grupar = False
+
     if st.button("Salvar Processo") and nome_processo:
         with get_db_connection() as conn:
             conn.execute("""
@@ -296,7 +353,6 @@ def tela_processos():
             """, (nome_processo, tipo_processo, frequencia, st.session_state.cliente_id))
             conn.commit()
             proc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-            print(f"DEBUG: Processo criado com ID: {proc_id}")
         st.session_state.processo_id = proc_id
         st.cache_data.clear()
         if st.session_state.get("grupar", False):
@@ -305,12 +361,19 @@ def tela_processos():
             st.session_state.tela = "configurar_processo"
         st.rerun()
 
+
 def tela_configurar_processo():
+    """
+    Tela para configurar o processo (layouts, arquivos de retorno etc.) e,
+    ao final, exibir dinamicamente o diagrama Mermaid do processo na mesma tela.
+    Encadeamentos e Arquivos terão a mesma forma ([ ]) porém com cores diferentes.
+    """
     processo_id = st.session_state.get("processo_id")
     if not processo_id:
         st.error("Processo não selecionado.")
         st.session_state.tela = "processos"
         st.rerun()
+
     with get_db_connection() as conn:
         processo = conn.execute(
             "SELECT id, nome, tipo, frequencia FROM processos WHERE id = ?", (processo_id,)
@@ -318,7 +381,8 @@ def tela_configurar_processo():
         proc_conf = conn.execute(
             "SELECT * FROM processo_config WHERE processo_id = ?", (processo_id,)
         ).fetchone()
-    print(f"DEBUG: Abrindo tela_configurar_processo para processo {processo_id}")
+
+    # Carrega layouts/retorno já salvos, se existirem
     if proc_conf:
         try:
             default_layouts = json.loads(proc_conf[3]) if proc_conf[3] else []
@@ -333,52 +397,58 @@ def tela_configurar_processo():
     else:
         default_layouts = []
         default_retorno = {}
+
     st.title(f"Configuração do Processo: {processo[1]}")
     st.markdown("---")
     st.header("Definição dos Layouts de Entrada")
+
     num_layouts = st.number_input(
-        "Número de Layouts de Entrada", 
-        min_value=1, 
-        step=1, 
-        value=len(default_layouts) if default_layouts else 1, 
+        "Número de Layouts de Entrada",
+        min_value=1,
+        step=1,
+        value=len(default_layouts) if default_layouts else 1,
         key="num_layouts"
     )
     layouts_config = []
+
     for i in range(1, num_layouts + 1):
         st.markdown(f"**Layout de Entrada #{i}**")
+
+        # Carrega config antiga para este índice, se existir
         if default_layouts and i <= len(default_layouts):
             layout_salvo = default_layouts[i-1]
             default_tipo = layout_salvo.get("tipo", "Arquivo")
         else:
+            layout_salvo = {}
             default_tipo = "Arquivo"
+
         layout_tipo = st.radio(
             f"Selecione o tipo de entrada para o layout #{i}",
             options=["Arquivo", "Encadeamento"],
-            index=0 if default_tipo=="Arquivo" else 1,
+            index=0 if default_tipo == "Arquivo" else 1,
             key=f"layout_tipo_{i}"
         )
+
         if layout_tipo == "Arquivo":
-            if default_layouts and i <= len(default_layouts) and layout_salvo.get("modo") in ["novo", "existente"]:
-                modo_default = layout_salvo.get("modo")
-            else:
-                modo_default = "novo"
+            modo_default = layout_salvo.get("modo", "novo")
             modo = st.radio(
                 f"Modo para o layout #{i}",
                 options=["novo", "existente"],
-                index=0 if modo_default=="novo" else 1,
+                index=0 if modo_default == "novo" else 1,
                 key=f"modo_layout_{i}"
             )
             if modo == "novo":
-                if default_layouts and i <= len(default_layouts):
-                    tipo_arquivo_default = layout_salvo.get("arquivo_tipo", "Excel")
-                    nome_layout_default = layout_salvo.get("nome", "")
-                else:
-                    tipo_arquivo_default = "Excel"
-                    nome_layout_default = ""
+                tipo_arquivo_default = layout_salvo.get("arquivo_tipo", "Excel")
+                nome_layout_default = layout_salvo.get("nome", "")
                 tipo_arquivo = st.selectbox(
                     f"Tipo de Arquivo para o layout #{i}",
-                    options=["Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML", "SWIFT", "Extrato Adquirente", "API", "Banco de Dados", "PDF"],
-                    index=["Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML", "SWIFT", "Extrato Adquirente", "API", "Banco de Dados", "PDF"].index(tipo_arquivo_default),
+                    options=["Excel", "CSV", "TXT", "OFX", "CNAB", "SPED", "EDI", "XML",
+                             "SWIFT", "Extrato Adquirente", "API", "Banco de Dados", "PDF"],
+                    index=0 if tipo_arquivo_default not in ["Excel","CSV","TXT","OFX","CNAB",
+                                                            "SPED","EDI","XML","SWIFT","Extrato Adquirente",
+                                                            "API","Banco de Dados","PDF"]
+                          else ["Excel","CSV","TXT","OFX","CNAB","SPED","EDI","XML","SWIFT",
+                                "Extrato Adquirente","API","Banco de Dados","PDF"].index(tipo_arquivo_default),
                     key=f"tipo_layout_{i}"
                 )
                 nome_layout = st.text_input(
@@ -404,7 +474,9 @@ def tela_configurar_processo():
                     "modo": "existente",
                     "arquivo": escolha_layout
                 })
+
         else:
+            # Encadeamento
             processos_existentes = load_processos(st.session_state.cliente_id)
             processos_filtrados = [proc for proc in processos_existentes if proc[0] != processo_id]
             if processos_filtrados:
@@ -413,31 +485,26 @@ def tela_configurar_processo():
                     options=[f"{proc[1]} - {proc[2]}" for proc in processos_filtrados],
                     key=f"proc_encadeado_{i}"
                 )
-                layouts_config.append({
-                    "tipo": "Encadeamento",
-                    "processo": processo_encadeado
-                })
             else:
                 st.info("Nenhum processo disponível para encadeamento.")
-                layouts_config.append({
-                    "tipo": "Encadeamento",
-                    "processo": None
-                })
+                processo_encadeado = None
+            layouts_config.append({
+                "tipo": "Encadeamento",
+                "processo": processo_encadeado
+            })
+
     st.markdown("---")
     st.header("Especificação de Arquivos de Retorno (Opcional)")
     usar_retorno = st.checkbox("Este processo requer arquivos de retorno?")
     retorno_config = {}
     if usar_retorno:
-        if default_retorno:
-            tipo_retorno_default = default_retorno.get("tipo", "CSV")
-            proposito_default = default_retorno.get("proposito", "")
-        else:
-            tipo_retorno_default = "CSV"
-            proposito_default = ""
+        tipo_retorno_default = default_retorno.get("tipo", "CSV")
+        proposito_default = default_retorno.get("proposito", "")
         tipo_retorno = st.selectbox(
             "Tipo de Arquivo de Retorno",
             ["CSV", "XML", "TXT", "JSON"],
-            index=["CSV", "XML", "TXT", "JSON"].index(tipo_retorno_default),
+            index=0 if tipo_retorno_default not in ["CSV","XML","TXT","JSON"]
+                  else ["CSV","XML","TXT","JSON"].index(tipo_retorno_default),
             key="retorno_tipo"
         )
         proposito_retorno = st.text_input(
@@ -449,17 +516,19 @@ def tela_configurar_processo():
             "tipo": tipo_retorno,
             "proposito": proposito_retorno
         }
+
     st.markdown("---")
-    if st.button("Gerenciar Layouts", key="gerenciar_layouts"):
-        st.session_state.tela = "layouts"
-        st.rerun()
+
     if st.button("Salvar Configuração do Processo"):
         print(f"DEBUG: Salvando configuração para processo {processo_id}")
         with get_db_connection() as conn:
-            proc_conf = conn.execute("SELECT id FROM processo_config WHERE processo_id = ?", (processo_id,)).fetchone()
-            if proc_conf:
+            existing_conf = conn.execute(
+                "SELECT id FROM processo_config WHERE processo_id = ?",
+                (processo_id,)
+            ).fetchone()
+            if existing_conf:
                 conn.execute("""
-                    UPDATE processo_config 
+                    UPDATE processo_config
                     SET layouts = ?, encadeamento = ?, retorno = ?
                     WHERE processo_id = ?
                 """, (
@@ -480,15 +549,112 @@ def tela_configurar_processo():
                 ))
             conn.execute("UPDATE processos SET configurado = 1 WHERE id = ?", (processo_id,))
             conn.commit()
-        print("DEBUG: Configuração salva com sucesso!")
         st.success("Configuração do processo salva com sucesso!")
-        st.session_state.tela = "processos"
         st.rerun()
+
     if st.button("Voltar para Processos"):
         st.session_state.tela = "processos"
         st.rerun()
 
+    st.markdown("---")
+    st.write("### Visualização do Diagrama do Processo")
+
+    # Depois de tudo, exibimos o diagrama atual (se existir config)
+    # Recarregamos a config para refletir as mudanças salvas (ou as antigas, se não salvou)
+    with get_db_connection() as conn:
+        re_proc_conf = conn.execute(
+            "SELECT layouts, retorno FROM processo_config WHERE processo_id = ?",
+            (processo_id,)
+        ).fetchone()
+
+    if not re_proc_conf:
+        st.info("Ainda não há configurações para gerar um diagrama.")
+        return
+
+    layouts_str, retorno_str = re_proc_conf
+    final_layouts = []
+    final_retorno = {}
+
+    if layouts_str:
+        try:
+            final_layouts = json.loads(layouts_str)
+        except Exception as e:
+            print("DEBUG: Erro ao carregar layouts (diagrama):", e)
+    if retorno_str:
+        try:
+            final_retorno = json.loads(retorno_str)
+        except Exception as e:
+            print("DEBUG: Erro ao carregar retorno (diagrama):", e)
+
+    # Gera o diagrama Mermaid
+    import unicodedata
+    def remove_accents(s: str) -> str:
+        nfkd = unicodedata.normalize('NFKD', s)
+        return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+    nome_proc = remove_accents(processo[1])
+
+    mermaid_code = [
+        "flowchart LR",
+        "  %% Estilos Modernos",
+        "  classDef arquivo fill:#E0F7FA,stroke:#00ACC1,stroke-width:1.5px,color:#006064,stroke-dasharray: 5 5",
+        "  classDef processo fill:#E8EAF6,stroke:#3949AB,stroke-width:2px,color:#1A237E",
+        "  classDef retorno fill:#FFF3E0,stroke:#FB8C00,stroke-width:1.5px,color:#E65100",
+        "  classDef encadeamento fill:#FCE4EC,stroke:#E91E63,stroke-width:1.5px,color:#880E4F,stroke-dasharray: 5 2",
+        "",
+        "  %% Fontes de Informação",
+        '  subgraph DataSources["🔍 Fontes"]',
+        "    direction TB"
+    ]
+
+    ds_counter = 1
+    connections = []
+
+    for layout in final_layouts:
+        ds_name = f"DS{ds_counter}"
+        ds_counter += 1
+
+        if layout["tipo"] == "Arquivo":
+            if layout.get("modo") == "existente":
+                label = layout.get("arquivo", "Layout Existente")
+            else:
+                label = f"{layout.get('arquivo_tipo','?')}: {layout.get('nome','?')}"
+            label = remove_accents(label)
+            mermaid_code.append(f'    {ds_name}(["📗 {label}"]):::arquivo')
+            connections.append(f"{ds_name} --> PROC")
+        else:
+            enc_label = remove_accents(layout.get("processo", "Processo Encadeado"))
+            # Mesmo formato de colchetes para encadeamento
+            mermaid_code.append(f'    {ds_name}(["🔁 {enc_label}"]):::encadeamento')
+            connections.append(f"{ds_name} --> PROC")
+
+    mermaid_code.append("  end\n")
+    mermaid_code.append(f'  PROC(["🔄 {nome_proc}"]):::processo')
+
+    for c in connections:
+        mermaid_code.append(f"  {c}")
+
+    if final_retorno:
+        ret_tipo = remove_accents(final_retorno.get("tipo", "Retorno"))
+        mermaid_code.append(f'  RET(["📑 {ret_tipo}"]):::retorno')
+        mermaid_code.append("  PROC --> RET")
+
+    mermaid_code_str = "\n".join(mermaid_code)
+
+    mermaid_html = f"""
+    <div class="mermaid">
+    {mermaid_code_str}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({{ startOnLoad: true }});
+    </script>
+    """
+
+    components.html(mermaid_html, height=600, scrolling=True)
+
 def tela_agrupamento():
+    """Tela para agrupar CNPJs em diferentes processos."""
     st.title("Agrupamento de CNPJs")
     selected_cnpjs = st.session_state.get("selected_cnpjs", [])
     if not selected_cnpjs:
@@ -510,6 +676,7 @@ def tela_agrupamento():
         distinct_groups.setdefault(grupo, []).append(cnpj)
     for grupo, cnpjs in distinct_groups.items():
         st.write(f"Grupo {grupo}: {', '.join(cnpjs)}")
+
     if st.button("Confirmar Agrupamento"):
         original_processo_id = st.session_state.get("processo_id")
         with get_db_connection() as conn:
@@ -562,11 +729,13 @@ def tela_agrupamento():
         st.session_state.grupar = False
         st.session_state.tela = "processos"
         st.rerun()
+
     if st.button("Voltar"):
         st.session_state.tela = "configurar_processo"
         st.rerun()
 
 def tela_layouts():
+    """Tela para gerenciar layouts de um processo."""
     st.title("Gerenciamento de Layouts")
     processo_id = st.session_state.get("processo_id")
     with get_db_connection() as conn:
@@ -591,6 +760,7 @@ def tela_layouts():
         st.rerun()
 
 def tela_adicionar_layout():
+    """Tela para adicionar um novo layout."""
     st.title("Adicionar Novo Layout")
     tipo_layout = st.radio("Tipo de Layout", ["Arquivo", "Encadeamento"])
     if tipo_layout == "Arquivo":
@@ -610,6 +780,7 @@ def tela_adicionar_layout():
         else:
             processo_encadeado = None
         novo_layout = {"tipo": "Encadeamento", "processo": processo_encadeado}
+
     if st.button("Salvar Novo Layout"):
         processo_id = st.session_state.processo_id
         with get_db_connection() as conn:
@@ -634,7 +805,135 @@ def tela_adicionar_layout():
         st.session_state.tela = "layouts"
         st.rerun()
 
-# --- Controle de Navegação das Telas ---
+# ------------------------------------------------------------------
+# Nova Tela: Diagrama em Mermaid.js
+# ------------------------------------------------------------------
+def tela_diagrama():
+    """
+    Exibe o diagrama do processo em Mermaid.js usando st.components.v1.html.
+    Aplica estilos modernos (arquivo, processo, retorno) e remove acentuação 
+    para evitar quebras no Mermaid.
+    """
+    st.title("Visualização do Processo - Diagrama")
+
+    processo_id = st.session_state.get("processo_id")
+    if not processo_id:
+        st.error("Processo não selecionado.")
+        st.session_state.tela = "processos"
+        st.rerun()
+
+    with get_db_connection() as conn:
+        proc = conn.execute(
+            "SELECT nome FROM processos WHERE id = ?", 
+            (processo_id,)
+        ).fetchone()
+        proc_conf = conn.execute(
+            "SELECT layouts, retorno FROM processo_config WHERE processo_id = ?",
+            (processo_id,)
+        ).fetchone()
+
+    if not proc_conf:
+        st.warning("Nenhuma configuração encontrada para este processo.")
+        if st.button("Voltar"):
+            st.session_state.tela = "configurar_processo"
+            st.rerun()
+        return
+
+    layouts_str, retorno_str = proc_conf
+    layouts_list = []
+    retorno_dict = {}
+
+    if layouts_str:
+        layouts_list = json.loads(layouts_str)
+    if retorno_str:
+        retorno_dict = json.loads(retorno_str)
+
+    nome_processo = remove_accents(proc[0]) if proc else "Processo"
+
+    # Início do diagrama Mermaid em formato HTML para uso com st.components.v1.html
+    mermaid_body = []
+    mermaid_body.append("---")
+    mermaid_body.append("config:")
+    mermaid_body.append("  look: neo")
+    mermaid_body.append("  theme: neutral")
+    mermaid_body.append("---")
+    mermaid_body.append("flowchart LR")
+    mermaid_body.append("  %% Estilos Modernos")
+    mermaid_body.append("  classDef arquivo fill:#E0F7FA,stroke:#00ACC1,stroke-width:1.5px,color:#006064,stroke-dasharray: 5 5")
+    mermaid_body.append("  classDef processo fill:#E8EAF6,stroke:#3949AB,stroke-width:2px,color:#1A237E")
+    mermaid_body.append("  classDef retorno fill:#FFF3E0,stroke:#FB8C00,stroke-width:1.5px,color:#E65100")
+    mermaid_body.append("")
+    mermaid_body.append("  %% Fontes de Informação")
+    mermaid_body.append("  subgraph DataSources[🔍 Fontes]")
+    mermaid_body.append("    direction TB")
+
+    ds_counter = 1
+    connections = []
+
+    for layout in layouts_list:
+        ds_name = f"DS{ds_counter}"
+        ds_counter += 1
+
+        if layout["tipo"] == "Arquivo":
+            # Exemplo de label: "📗 Excel - LayoutX"
+            if layout.get("modo") == "existente":
+                label = layout.get("arquivo", "Layout Existente")
+            else:
+                label = f"{layout.get('arquivo_tipo', '?')} - {layout.get('nome', '?')}"
+            label = remove_accents(label)
+            mermaid_body.append(f'    {ds_name}(["📗 {label}"]):::arquivo')
+        else:
+            # Encadeamento (se quiser um estilo especial, adicione outra classDef)
+            label = remove_accents(layout.get("processo", "Processo Encadeado?"))
+            mermaid_body.append(f'    {ds_name}(["🔗 {label}"]):::arquivo')
+
+        # Depois conectamos no processo
+        connections.append(f"{ds_name} --> PROC")
+
+    mermaid_body.append("  end")
+    mermaid_body.append("")
+
+    # Processo central
+    mermaid_body.append(f'  %% Processo')
+    mermaid_body.append(f'  PROC(["🔄 {nome_processo}"]):::processo')
+    mermaid_body.append("")
+
+    # Conexões (Fontes -> Processo)
+    for c in connections:
+        mermaid_body.append(f"  {c}")
+
+    # Se houver retorno
+    if retorno_dict:
+        tipo_ret = remove_accents(retorno_dict.get("tipo", "Retorno?"))
+        mermaid_body.append(f'  %% Retorno')
+        mermaid_body.append(f'  RET(["📑 Retorno {tipo_ret}"]):::retorno')
+        mermaid_body.append(f'  PROC --> RET')
+
+    # Junta todo o diagrama
+    mermaid_code = "\n".join(mermaid_body)
+
+    # HTML final para exibir com st.components
+    html_diagrama = f"""
+    <div class="mermaid">
+    {mermaid_code}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+    mermaid.initialize({{ startOnLoad: true }});
+    </script>
+    """
+
+    components.html(html_diagrama, height=600, scrolling=True)
+
+    # Botão de voltar
+    if st.button("Voltar"):
+        st.session_state.tela = "configurar_processo"
+        st.rerun()
+
+
+# ------------------------------------------------------------------
+# Dicionário de Telas
+# ------------------------------------------------------------------
 telas = {
     "login": tela_login,
     "inicial": tela_inicial,
@@ -643,9 +942,13 @@ telas = {
     "configurar_processo": tela_configurar_processo,
     "agrupamento": tela_agrupamento,
     "layouts": tela_layouts,
-    "adicionar_layout": tela_adicionar_layout
+    "adicionar_layout": tela_adicionar_layout,
+    "diagrama": tela_diagrama
 }
 
+# ------------------------------------------------------------------
+# Controle de Navegação das Telas
+# ------------------------------------------------------------------
 tela = st.session_state.tela
 if tela in telas:
     telas[tela]()
