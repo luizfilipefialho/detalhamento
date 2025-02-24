@@ -194,11 +194,11 @@ def tela_login():
 
             codigo = st.text_input("Digite o código do cliente:", placeholder="Ex: 123")
 
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 entrar = st.form_submit_button("Entrar")
-            with col2:
-                cadastrar = st.form_submit_button("Cadastrar Novo Cliente")
+            with col3:
+                cadastrar = st.form_submit_button("Cadastrar Novo Cliente",use_container_width=True)
 
             if entrar:
                 try:
@@ -270,63 +270,94 @@ def tela_visao_cliente():
     if st.button("Adicionar CNPJ") and novo_cnpj:
         if add_cnpj(st.session_state.cliente_id, novo_cnpj):
             st.rerun()
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.button("✏️ Editar Cliente", on_click=lambda: st.session_state.update(tela="inicial"))
-    with col2:
-        st.button("⏭️ Continuar para Processos", on_click=lambda: st.session_state.update(tela="processos"))
-
-
-    st.markdown("""
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <i class="fa-solid fa-file-csv"></i> Arquivo CSV  
-    <i class="fa-solid fa-file-pdf"></i> Arquivo PDF  
-    <i class="fa-solid fa-file-excel"></i> Arquivo Excel  
-    <i class="fa-solid fa-file-word"></i> Arquivo Word  
-    <i class="fa-solid fa-file-zipper"></i> Arquivo Zip  
-    """, unsafe_allow_html=True)
-
+        st.button("✏️ Editar Cliente", on_click=lambda: st.session_state.update(tela="inicial"),use_container_width=True)
+    with col3:
+        st.button("⏭️ Continuar para Processos", on_click=lambda: st.session_state.update(tela="processos"),use_container_width=True)
 
 def tela_processos():
     """
     Tela para listar e criar processos, além de permitir a geração de um diagrama
     selecionando um processo via selectbox.
     """
-    st.title("⚙️ Configuração de Processos")
+    cliente = load_cliente(st.session_state.cliente_id)
+    if not cliente:
+        st.error("Cliente não encontrado!")
+        st.session_state.tela = "login"
+        st.rerun()
+        return
+
+    # Cabeçalho: Nome do cliente no título, sem logo
+    st.title(f"Configuração de Processos - {cliente[1]}")
     st.write("Gerencie e adicione processos financeiros para este cliente.")
+    st.write("---")
+
 
     processos = load_processos(st.session_state.cliente_id)
     
     if processos:
-        st.subheader("🔍 Processos Existentes")
+        st.subheader("Processos Mapeados")
 
-        # Botões para editar cada processo (opcional, pode remover se quiser apenas o selectbox)
+        # CSS personalizado assertivo para padding inferior e alinhamento vertical centralizado
+        st.markdown("""
+        <style>
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            padding-bottom: 15px !important;
+        }
+        div[data-testid="column"] {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        conn = get_db_connection()
         for proc in processos:
-            if st.button(f"🔗 {proc[1]} - {proc[2]} ({proc[3]})", key=f"processo_{proc[0]}"):
-                st.session_state.processo_id = proc[0]
-                st.session_state.tela = "configurar_processo"
-                st.rerun()
+            proc_id, proc_nome, proc_tipo, proc_freq = proc[0], proc[1], proc[2], proc[3]
 
-        # st.write("---")
-        # st.subheader("Gerar Diagrama do Processo")
+            row_desc = conn.execute("SELECT descricao FROM processos WHERE id = ?", (proc_id,)).fetchone()
+            descricao = row_desc[0] if (row_desc and row_desc[0]) else ""
 
-        # # Cria uma lista de opções no formato "ID - NomeDoProcesso"
-        # opcoes_diagrama = [f"{p[0]} - {p[1]}" for p in processos]
-        # selecao = st.selectbox("Selecione um processo para gerar o diagrama", opcoes_diagrama)
+            layout_count = 0
+            row_layouts = conn.execute(
+                "SELECT layouts FROM processo_config WHERE processo_id = ?",
+                (proc_id,)
+            ).fetchone()
+            if row_layouts and row_layouts[0]:
+                try:
+                    layouts_list = json.loads(row_layouts[0])
+                    layout_count = len(layouts_list)
+                except:
+                    pass
 
-        # if st.button("Gerar Diagrama do Processo"):
-        #     # Extrai o ID do processo da string "ID - Nome"
-        #     proc_id_str = selecao.split(" - ")[0]
-        #     proc_id = int(proc_id_str)
-        #     st.session_state.processo_id = proc_id
-        #     st.session_state.tela = "diagrama"
-        #     st.rerun()
+            # Container assertivo
+            with st.container(border=True):
+                col_left, col_right = st.columns([0.85, 0.15])
 
+                with col_left:
+                    st.markdown(f"<h4 style='color:#333;margin-bottom:5px;'>{proc_nome}</h4>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='font-size:0.9rem;color:#666;margin-bottom:5px;'>"
+                        f"Tipo: {proc_tipo} • Freq: {proc_freq} • Layouts: {layout_count}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                    if descricao:
+                        st.markdown(f"<div style='font-size:0.85rem;color:#888;'>{descricao}</div>", unsafe_allow_html=True)
+
+                with col_right:
+                    if st.button("Editar", key=f"config_{proc_id}"):
+                        st.session_state.processo_id = proc_id
+                        st.session_state.tela = "configurar_processo"
+                        st.rerun()
+
+        conn.close()
     else:
         st.info("Nenhum processo cadastrado para este cliente.")
+
+
 
     st.write("---")
     st.subheader("Criar Novo Processo")
@@ -360,7 +391,19 @@ def tela_processos():
         else:
             st.session_state.tela = "configurar_processo"
         st.rerun()
+    st.write("---")
+    # Linha de botões inferiores
+    col1, col2, col3 = st.columns(3)
 
+    with col1:
+        if st.button("Voltar à Visão do Cliente", use_container_width=True):
+            st.session_state.tela = "visao_cliente"
+            st.rerun()
+
+    with col3:
+        if st.button("Gerar Relatório", use_container_width=True):
+            st.session_state.tela = "relatorio"
+            st.rerun()
 
 def tela_configurar_processo():
     """
@@ -492,9 +535,12 @@ def tela_configurar_processo():
                 "tipo": "Encadeamento",
                 "processo": processo_encadeado
             })
+    if st.button("Gerenciar Layouts"):
+        st.session_state.tela = "layouts"
+        st.rerun()    
 
     st.markdown("---")
-    st.header("Especificação de Arquivos de Retorno (Opcional)")
+    st.subheader("Especificação de Arquivos de Retorno (Opcional)")
     usar_retorno = st.checkbox("Este processo requer arquivos de retorno?")
     retorno_config = {}
     if usar_retorno:
@@ -516,45 +562,46 @@ def tela_configurar_processo():
             "tipo": tipo_retorno,
             "proposito": proposito_retorno
         }
-
     st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("Salvar Processo",use_container_width=True):
+            print(f"DEBUG: Salvando configuração para processo {processo_id}")
+            with get_db_connection() as conn:
+                existing_conf = conn.execute(
+                    "SELECT id FROM processo_config WHERE processo_id = ?",
+                    (processo_id,)
+                ).fetchone()
+                if existing_conf:
+                    conn.execute("""
+                        UPDATE processo_config
+                        SET layouts = ?, encadeamento = ?, retorno = ?
+                        WHERE processo_id = ?
+                    """, (
+                        json.dumps(layouts_config),
+                        "",
+                        json.dumps(retorno_config),
+                        processo_id
+                    ))
+                else:
+                    conn.execute("""
+                        INSERT INTO processo_config (processo_id, layouts, encadeamento, retorno)
+                        VALUES (?, ?, ?, ?)
+                    """, (
+                        processo_id,
+                        json.dumps(layouts_config),
+                        "",
+                        json.dumps(retorno_config)
+                    ))
+                conn.execute("UPDATE processos SET configurado = 1 WHERE id = ?", (processo_id,))
+                conn.commit()
+            st.success("Configuração do processo salva com sucesso!")
+            st.rerun()  
+    with col3:
 
-    if st.button("Salvar Configuração do Processo"):
-        print(f"DEBUG: Salvando configuração para processo {processo_id}")
-        with get_db_connection() as conn:
-            existing_conf = conn.execute(
-                "SELECT id FROM processo_config WHERE processo_id = ?",
-                (processo_id,)
-            ).fetchone()
-            if existing_conf:
-                conn.execute("""
-                    UPDATE processo_config
-                    SET layouts = ?, encadeamento = ?, retorno = ?
-                    WHERE processo_id = ?
-                """, (
-                    json.dumps(layouts_config),
-                    "",
-                    json.dumps(retorno_config),
-                    processo_id
-                ))
-            else:
-                conn.execute("""
-                    INSERT INTO processo_config (processo_id, layouts, encadeamento, retorno)
-                    VALUES (?, ?, ?, ?)
-                """, (
-                    processo_id,
-                    json.dumps(layouts_config),
-                    "",
-                    json.dumps(retorno_config)
-                ))
-            conn.execute("UPDATE processos SET configurado = 1 WHERE id = ?", (processo_id,))
-            conn.commit()
-        st.success("Configuração do processo salva com sucesso!")
-        st.rerun()
-
-    if st.button("Voltar para Processos"):
-        st.session_state.tela = "processos"
-        st.rerun()
+        if st.button("Voltar para Processos",use_container_width=True):
+            st.session_state.tela = "processos"
+            st.rerun()
 
     st.markdown("---")
     st.write("### Visualização do Diagrama do Processo")
@@ -587,7 +634,6 @@ def tela_configurar_processo():
             print("DEBUG: Erro ao carregar retorno (diagrama):", e)
 
     # Gera o diagrama Mermaid
-    import unicodedata
     def remove_accents(s: str) -> str:
         nfkd = unicodedata.normalize('NFKD', s)
         return "".join([c for c in nfkd if not unicodedata.combining(c)])
@@ -734,30 +780,156 @@ def tela_agrupamento():
         st.session_state.tela = "configurar_processo"
         st.rerun()
 
-def tela_layouts():
-    """Tela para gerenciar layouts de um processo."""
-    st.title("Gerenciamento de Layouts")
+def tela_layouts(): 
+
+    def remove_accents(s: str) -> str:
+        nfkd = unicodedata.normalize('NFKD', s)
+        return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+    def count_layout_usage(db_conn, layout_dict):
+        usage_count = 0
+        rows = db_conn.execute("SELECT layouts FROM processo_config").fetchall()
+        for row in rows:
+            if row[0]:
+                try:
+                    conf_layouts = json.loads(row[0])
+                    for item in conf_layouts:
+                        if item == layout_dict:
+                            usage_count += 1
+                            break
+                except:
+                    pass
+        return usage_count
+
     processo_id = st.session_state.get("processo_id")
     with get_db_connection() as conn:
-        proc_conf = conn.execute("SELECT layouts FROM processo_config WHERE processo_id = ?", (processo_id,)).fetchone()
+        proc_conf = conn.execute(
+            "SELECT id, layouts FROM processo_config WHERE processo_id = ?",
+            (processo_id,)
+        ).fetchone()
+
     layouts_config = []
-    if proc_conf and proc_conf[0]:
-        try:
-            layouts_config = json.loads(proc_conf[0])
-        except Exception as e:
-            print("DEBUG: Erro ao carregar layouts:", e)
-    st.subheader("Layouts Criados")
-    if layouts_config:
-        for idx, layout in enumerate(layouts_config):
-            st.write(f"Layout {idx+1}: {layout}")
-    else:
+    proc_conf_id = None
+    if proc_conf:
+        proc_conf_id, layouts_str = proc_conf
+        if layouts_str:
+            try:
+                layouts_config = json.loads(layouts_str)
+            except Exception as e:
+                st.error(f"Erro ao carregar layouts: {e}")
+
+    # CSS definitivo assertivo
+    st.markdown("""
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .layout-card{
+            display:flex!important;
+            align-items:center!important;
+            justify-content:space-between!important;
+            padding:10px!important;
+            background-color:white!important;
+            border-radius:8px!important;
+            box-shadow:0 4px 10px rgba(0,0,0,0.05)!important;
+            margin-bottom:8px!important;
+        }
+        .layout-info{
+            display:flex!important;
+            flex-direction:column!important;
+        }
+        .layout-title{
+            font-weight:600!important;
+            color:#333!important;
+            font-size:0.95rem!important;
+        }
+        .layout-usage{
+            color:#999!important;
+            font-size:0.8rem!important;
+        }
+        button[kind="secondary"]{
+            background:none!important;
+            color:#FF4B4B!important;
+            padding:0!important;
+            margin:0!important;
+            border:none!important;
+            font-size:0.85rem!important;
+            text-decoration:underline!important;
+            cursor:pointer!important;
+            box-shadow:none!important;
+            height:auto!important;
+            width:auto!important;
+        }
+        button[kind="secondary"]:hover{
+            color:#D00000!important;
+        }
+    </style>""", unsafe_allow_html=True)
+
+    st.title("Gerenciamento de Layouts")
+
+    if not layouts_config:
         st.info("Nenhum layout criado.")
-    if st.button("Adicionar Novo Layout"):
-        st.session_state.tela = "adicionar_layout"
-        st.rerun()
-    if st.button("Voltar"):
-        st.session_state.tela = "configurar_processo"
-        st.rerun()
+    else:
+        icon_map = {
+            "CSV":"fa-solid fa-file-csv",
+            "PDF":"fa-solid fa-file-pdf",
+            "Excel":"fa-solid fa-file-excel",
+            "Word":"fa-solid fa-file-word",
+            "Zip":"fa-solid fa-file-zipper",
+            "Banco de Dados":"fa-solid fa-database",
+            "API":"fa-solid fa-database",
+            "Extrato Adquirente":"fa-solid fa-credit-card",
+            "DEFAULT":"fa-solid fa-file"
+        }
+
+        conn = get_db_connection()
+
+        for idx, layout in enumerate(layouts_config):
+            arquivo_tipo = layout.get("arquivo_tipo","")
+            icon_class = icon_map.get(arquivo_tipo,icon_map["DEFAULT"]) if layout["tipo"]=="Arquivo" else "fa-solid fa-diagram-project"
+            titulo = layout.get("arquivo","Layout Existente") if layout.get("modo")=="existente" else f"{layout.get('nome','SemNome')} - {arquivo_tipo}"
+            if layout["tipo"] != "Arquivo":
+                titulo = f"{layout.get('processo','Encadeado')} - Encadeamento"
+
+            titulo = remove_accents(titulo)
+            usage_count = count_layout_usage(conn,layout)
+
+            with st.container(border=True):
+                col_left,col_right=st.columns([0.85,0.15])
+
+                with col_left:
+                    st.markdown(f"""
+                        <div class='layout-info'>
+                            <div class='layout-title'>
+                                <i class='{icon_class}'></i>&nbsp;{titulo}
+                            </div>
+                            <div class='layout-usage'>Em {usage_count} processo(s)</div>
+                        </div>""",unsafe_allow_html=True)
+
+                with col_right:
+                    if st.button("Excluir",key=f"del_{idx}"):
+                        layouts_config.remove(layout)
+                        if proc_conf_id:
+                            conn.execute("UPDATE processo_config SET layouts=? WHERE id=?",(json.dumps(layouts_config),proc_conf_id))
+                            conn.commit()
+                        st.success("Layout excluído com sucesso!")
+                        st.rerun()
+
+        conn.close()
+
+    # Alinhamento definitivo dos botões inferiores
+    container = st.container()
+    with container:
+        col1, col2 = st.columns([0.85,0.15])
+
+
+        with col1:
+            if st.button("➕ Adicionar Layout"):
+                st.session_state.tela="adicionar_layout"
+                st.rerun()
+
+        with col2:
+            if st.button("⬅️ Voltar"):
+                st.session_state.tela="configurar_processo"
+                st.rerun()
 
 def tela_adicionar_layout():
     """Tela para adicionar um novo layout."""
@@ -805,9 +977,6 @@ def tela_adicionar_layout():
         st.session_state.tela = "layouts"
         st.rerun()
 
-# ------------------------------------------------------------------
-# Nova Tela: Diagrama em Mermaid.js
-# ------------------------------------------------------------------
 def tela_diagrama():
     """
     Exibe o diagrama do processo em Mermaid.js usando st.components.v1.html.
@@ -930,6 +1099,310 @@ def tela_diagrama():
         st.session_state.tela = "configurar_processo"
         st.rerun()
 
+def tela_relatorio():
+    """
+    Tela que mostra:
+      1) Um resumo de quantidades (Entradas, Tipos de Análise, Retornos) usando os registros do banco.
+      2) Ao final, exibe o diagrama Mermaid de cada processo cadastrado, tudo na mesma tela.
+
+    Dessa forma, o 'relatório' inclui tanto as tabelas de resumo quanto os diagramas de cada processo.
+    """
+
+    st.title("Relatório de Quantidades e Diagramas")
+
+    # ----------------------------------------------------------------
+    # CSS para personalizar as tabelas (opcional)
+    # ----------------------------------------------------------------
+    st.markdown("""
+    <style>
+    /* Cabeçalho da tabela com fundo escuro e texto claro */
+    thead tr th {
+        background-color: #343a40 !important;
+        color: #ffffff !important;
+    }
+    /* Linhas pares com fundo levemente diferente */
+    tbody tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    /* Ajustes de fonte e margens */
+    table {
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+    }
+    .mermaid {
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ----------------------------------------------------------------
+    # 1) TIPO ENTRADA
+    # ----------------------------------------------------------------
+    entrada_counts = {
+        "Excel": 0,
+        "Arquivos texto": 0,
+        "Arquivos padrões especiais": 0,
+        "API / Banco de Dados": 0,
+        "PDF": 0
+    }
+
+    def categoriza_layout_entrada(arquivo_tipo: str) -> str:
+        arquivo_tipo_lower = arquivo_tipo.lower()
+        if "excel" in arquivo_tipo_lower:
+            return "Excel"
+        if arquivo_tipo_lower in ["csv", "txt", "ofx"]:
+            return "Arquivos texto"
+        if arquivo_tipo_lower in ["cnab", "sped", "edi", "xml", "swift", "extrato adquirente"]:
+            return "Arquivos padrões especiais"
+        if arquivo_tipo_lower in ["api", "banco de dados"]:
+            return "API / Banco de Dados"
+        if arquivo_tipo_lower == "pdf":
+            return "PDF"
+        return "Arquivos texto"
+
+    with get_db_connection() as conn:
+        rows = conn.execute("SELECT layouts FROM processo_config").fetchall()
+        for row in rows:
+            if row[0]:
+                try:
+                    layouts_list = json.loads(row[0])
+                    for layout in layouts_list:
+                        if layout.get("tipo") == "Arquivo":
+                            tipo_arq = layout.get("arquivo_tipo", "")
+                            cat = categoriza_layout_entrada(tipo_arq)
+                            if cat in entrada_counts:
+                                entrada_counts[cat] += 1
+                            else:
+                                entrada_counts["Arquivos texto"] += 1
+                except:
+                    pass
+
+    data_entrada = [
+        {"TIPO ENTRADA": "Excel", 
+         "QUANTIDADE": entrada_counts["Excel"]},
+        {"TIPO ENTRADA": "Arquivos texto (CSV, TXT, OFX, etc.)", 
+         "QUANTIDADE": entrada_counts["Arquivos texto"]},
+        {"TIPO ENTRADA": "Arquivos com padrões especiais (CNAB, SPED, EDI, XML, SWIFT, etc.)", 
+         "QUANTIDADE": entrada_counts["Arquivos padrões especiais"]},
+        {"TIPO ENTRADA": "API / Banco de Dados", 
+         "QUANTIDADE": entrada_counts["API / Banco de Dados"]},
+        {"TIPO ENTRADA": "PDF", 
+         "QUANTIDADE": entrada_counts["PDF"]},
+    ]
+
+    st.subheader("TIPO ENTRADA")
+    st.table(data_entrada)
+
+    # ----------------------------------------------------------------
+    # 2) TIPO ANÁLISE (processos do banco)
+    # ----------------------------------------------------------------
+    analise_counts = {
+        "Análise Tabular (Resultados)": 0,
+        "Análise Comparativa (Conciliações)": 0,
+        "Análise Composição (Saldos)": 0,
+        "Análise Meios Pagamento": 0
+    }
+
+    def categoriza_processo(tipo: str) -> str:
+        tipo_lower = tipo.lower()
+        if tipo_lower == "análise tabular":
+            return "Análise Tabular (Resultados)"
+        if tipo_lower == "conciliação":
+            return "Análise Comparativa (Conciliações)"
+        if tipo_lower == "saldos":
+            return "Análise Composição (Saldos)"
+        if tipo_lower == "pagamentos":
+            return "Análise Meios Pagamento"
+        return None
+
+    with get_db_connection() as conn:
+        rows = conn.execute("SELECT tipo FROM processos").fetchall()
+        for row in rows:
+            tipo_proc = row[0] if row[0] else ""
+            cat_analise = categoriza_processo(tipo_proc)
+            if cat_analise and cat_analise in analise_counts:
+                analise_counts[cat_analise] += 1
+
+    data_analise = [
+        {"TIPO ANÁLISE": "Análise Tabular (Resultados)", 
+         "QUANTIDADE": analise_counts["Análise Tabular (Resultados)"]},
+        {"TIPO ANÁLISE": "Análise Comparativa (Conciliações)", 
+         "QUANTIDADE": analise_counts["Análise Comparativa (Conciliações)"]},
+        {"TIPO ANÁLISE": "Análise Composição (Saldos)", 
+         "QUANTIDADE": analise_counts["Análise Composição (Saldos)"]},
+        {"TIPO ANÁLISE": "Análise Meios Pagamento", 
+         "QUANTIDADE": analise_counts["Análise Meios Pagamento"]},
+    ]
+
+    st.subheader("TIPO ANÁLISE")
+    st.table(data_analise)
+
+    # ----------------------------------------------------------------
+    # 3) ARQUIVOS DE RETORNO (TIPO SAÍDA)
+    # ----------------------------------------------------------------
+    saida_counts = {
+        "Excel": 0,
+        "Texto (CSV, TXT simples, OFX, etc.)": 0,
+        "Texto Multi-estrutural (CNAB, SPED, EDI, XML, SWIFT, etc.)": 0,
+        "API / Banco de Dados": 0,
+        "PDF": 0,
+        "HTML (Dashboard)": 0
+    }
+
+    def categoriza_saida(retorno_tipo: str) -> str:
+        r_lower = retorno_tipo.lower()
+        if "excel" in r_lower:
+            return "Excel"
+        if r_lower in ["csv", "txt", "ofx"]:
+            return "Texto (CSV, TXT simples, OFX, etc.)"
+        if r_lower in ["cnab", "sped", "edi", "xml", "swift", "extrato adquirente"]:
+            return "Texto Multi-estrutural (CNAB, SPED, EDI, XML, SWIFT, etc.)"
+        if r_lower in ["api", "banco de dados"]:
+            return "API / Banco de Dados"
+        if r_lower == "pdf":
+            return "PDF"
+        if r_lower == "html":
+            return "HTML (Dashboard)"
+        return "Texto (CSV, TXT simples, OFX, etc.)"
+
+    with get_db_connection() as conn:
+        rows = conn.execute("SELECT retorno FROM processo_config").fetchall()
+        for row in rows:
+            if row[0]:
+                try:
+                    ret_dict = json.loads(row[0])
+                    ret_tipo = ret_dict.get("tipo", "")
+                    if ret_tipo:
+                        cat_saida = categoriza_saida(ret_tipo)
+                        if cat_saida in saida_counts:
+                            saida_counts[cat_saida] += 1
+                        else:
+                            saida_counts["Texto (CSV, TXT simples, OFX, etc.)"] += 1
+                except:
+                    pass
+
+    data_saida = [
+        {"TIPO SAÍDA": "Excel", 
+         "QUANTIDADE": saida_counts["Excel"]},
+        {"TIPO SAÍDA": "Texto (CSV, TXT simples, OFX, etc.)", 
+         "QUANTIDADE": saida_counts["Texto (CSV, TXT simples, OFX, etc.)"]},
+        {"TIPO SAÍDA": "Texto Multi-estrutural (CNAB, SPED, EDI, XML, SWIFT, etc.)", 
+         "QUANTIDADE": saida_counts["Texto Multi-estrutural (CNAB, SPED, EDI, XML, SWIFT, etc.)"]},
+        {"TIPO SAÍDA": "API / Banco de Dados", 
+         "QUANTIDADE": saida_counts["API / Banco de Dados"]},
+        {"TIPO SAÍDA": "PDF", 
+         "QUANTIDADE": saida_counts["PDF"]},
+        {"TIPO SAÍDA": "HTML (Dashboard)", 
+         "QUANTIDADE": saida_counts["HTML (Dashboard)"]},
+    ]
+
+    st.subheader("ARQUIVOS DE RETORNO > TIPO SAÍDA")
+    st.table(data_saida)
+
+    # ----------------------------------------------------------------
+    # 4) Exibir Diagrama de TODOS os Processos (ou um por um)
+    # ----------------------------------------------------------------
+    st.write("### Diagramas de Todos os Processos")
+
+    import streamlit.components.v1 as components
+
+    with get_db_connection() as conn:
+        procs = conn.execute("SELECT id, nome FROM processos").fetchall()
+
+    if not procs:
+        st.info("Não há processos cadastrados.")
+    else:
+        for p in procs:
+            st.subheader(f"Processo: {p[1]}")
+            # Carrega layouts/retorno do processo
+            with get_db_connection() as conn:
+                proc_conf = conn.execute(
+                    "SELECT layouts, retorno FROM processo_config WHERE processo_id = ?",
+                    (p[0],)
+                ).fetchone()
+            if not proc_conf:
+                st.info("Nenhuma configuração para este processo.")
+                continue
+
+            layouts_str, retorno_str = proc_conf
+            layouts_list = []
+            retorno_dict = {}
+            if layouts_str:
+                try:
+                    layouts_list = json.loads(layouts_str)
+                except:
+                    pass
+            if retorno_str:
+                try:
+                    retorno_dict = json.loads(retorno_str)
+                except:
+                    pass
+
+            nome_processo = remove_accents(p[1])
+            mermaid_code = [
+                "flowchart LR",
+                "  %% Estilos Modernos",
+                "  classDef arquivo fill:#E0F7FA,stroke:#00ACC1,stroke-width:1.5px,color:#006064,stroke-dasharray: 5 5",
+                "  classDef processo fill:#E8EAF6,stroke:#3949AB,stroke-width:2px,color:#1A237E",
+                "  classDef retorno fill:#FFF3E0,stroke:#FB8C00,stroke-width:1.5px,color:#E65100",
+                "  classDef encadeamento fill:#FCE4EC,stroke:#E91E63,stroke-width:1.5px,color:#880E4F,stroke-dasharray: 5 2",
+                "",
+                "  %% Fontes de Informação",
+                '  subgraph DataSources["🔍 Fontes"]',
+                "    direction TB"
+            ]
+
+            ds_counter = 1
+            connections = []
+
+            for layout in layouts_list:
+                ds_name = f"DS{ds_counter}"
+                ds_counter += 1
+
+                if layout["tipo"] == "Arquivo":
+                    if layout.get("modo") == "existente":
+                        label = layout.get("arquivo", "Layout Existente")
+                    else:
+                        label = f"{layout.get('arquivo_tipo','?')}: {layout.get('nome','?')}"
+                    label = remove_accents(label)
+                    mermaid_code.append(f'    {ds_name}(["📗 {label}"]):::arquivo')
+                    connections.append(f"{ds_name} --> PROC")
+                else:
+                    enc_label = remove_accents(layout.get("processo", "Encadeado"))
+                    mermaid_code.append(f'    {ds_name}(["🔁 {enc_label}"]):::encadeamento')
+                    connections.append(f"{ds_name} --> PROC")
+
+            mermaid_code.append("  end\n")
+            mermaid_code.append(f'  PROC(["🔄 {nome_processo}"]):::processo')
+
+            for c in connections:
+                mermaid_code.append(f"  {c}")
+
+            if retorno_dict:
+                ret_tipo = remove_accents(retorno_dict.get("tipo", "Retorno"))
+                mermaid_code.append(f'  RET(["📑 {ret_tipo}"]):::retorno')
+                mermaid_code.append("  PROC --> RET")
+
+            mermaid_code_str = "\n".join(mermaid_code)
+            mermaid_html = f"""
+            <div class="mermaid">
+            {mermaid_code_str}
+            </div>
+            <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+            <script>
+                mermaid.initialize({{ startOnLoad: true }});
+            </script>
+            """
+
+            components.html(mermaid_html, height=400, scrolling=True)
+
+    st.write("---")
+    if st.button("Voltar"):
+        st.session_state.tela = "processos"
+        st.rerun()
+
+
 
 # ------------------------------------------------------------------
 # Dicionário de Telas
@@ -943,7 +1416,8 @@ telas = {
     "agrupamento": tela_agrupamento,
     "layouts": tela_layouts,
     "adicionar_layout": tela_adicionar_layout,
-    "diagrama": tela_diagrama
+    "diagrama": tela_diagrama,
+    "relatorio":tela_relatorio
 }
 
 # ------------------------------------------------------------------
