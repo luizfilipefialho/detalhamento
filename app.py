@@ -641,6 +641,13 @@ def tela_configurar_processo():
     nome_proc = remove_accents(processo[1])
 
     mermaid_code = [
+
+
+
+        "---"
+        "config:"
+        "theme: neutral"
+        "---"
         "flowchart LR",
         "  %% Estilos Modernos",
         "  classDef arquivo fill:#E0F7FA,stroke:#00ACC1,stroke-width:1.5px,color:#006064,stroke-dasharray: 5 5",
@@ -1341,6 +1348,10 @@ def tela_relatorio():
 
             nome_processo = remove_accents(p[1])
             mermaid_code = [
+                "---"
+                "config:"
+                "theme: neutral"
+                "---"
                 "flowchart LR",
                 "  %% Estilos Modernos",
                 "  classDef arquivo fill:#E0F7FA,stroke:#00ACC1,stroke-width:1.5px,color:#006064,stroke-dasharray: 5 5",
