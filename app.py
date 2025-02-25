@@ -563,7 +563,7 @@ def tela_configurar_processo():
             "proposito": proposito_retorno
         }
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Salvar Processo",use_container_width=True):
             print(f"DEBUG: Salvando configuração para processo {processo_id}")
@@ -597,11 +597,24 @@ def tela_configurar_processo():
                 conn.commit()
             st.success("Configuração do processo salva com sucesso!")
             st.rerun()  
+        if st.button("Excluir Processo", use_container_width=True):
+            with get_db_connection() as conn:
+                # Primeiro exclui a config (se existir)
+                conn.execute("DELETE FROM processo_config WHERE processo_id = ?", (processo_id,))
+                # Em seguida, exclui o processo
+                conn.execute("DELETE FROM processos WHERE id = ?", (processo_id,))
+                conn.commit()
+            st.success("Processo excluído com sucesso!")
+            st.session_state.tela = "processos"
+            st.rerun()
     with col3:
 
         if st.button("Voltar para Processos",use_container_width=True):
             st.session_state.tela = "processos"
             st.rerun()
+    
+    # Botão para excluir o processo
+        
 
     st.markdown("---")
     st.write("### Visualização do Diagrama do Processo")
